@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<sdf version="1.8">
+    <world name="car_world">
+        <include>
+            <uri>
+                https://fuel.gazebosim.org/1.0/GoogleResearch/models/Curver_Storage_Bin_Black_Small
+            </uri>
+        </include>
+    </world>
+</sdf>
