@@ -22,7 +22,6 @@ public:
     PandaRobot()
     {
         // Initialize ROS before any node or logger creation
-
         node_ = std::make_shared<rclcpp::Node>(
             "hello_moveit",
             rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true));
@@ -46,7 +45,9 @@ public:
 
         move_group_interface_ = std::make_unique<moveit::planning_interface::MoveGroupInterface>(node_, "panda_arm");
         planning_scene_interface_ = std::make_unique<moveit::planning_interface::PlanningSceneInterface>();
+        gripper_ = std::make_unique<moveit::planning_interface::MoveGroupInterface>(node_,"hand");
         rclcpp::sleep_for(std::chrono::seconds(2));
+        addCollisionObjects("default","box");
     }
 
     ~PandaRobot()
@@ -54,6 +55,14 @@ public:
         rclcpp::shutdown();
         if (spinner_.joinable())
             spinner_.join();
+    }
+
+    void gripper_check()
+    {
+        gripperOpen();
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        //gripperClose();
+        //std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
     void run(std::string move_type = "default")
@@ -92,6 +101,43 @@ public:
             moveLinear(target_pose);
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
+    }
+
+    void pickPlace()
+    {
+       //Define the instances of approach, Grasp, Target and Drop Pose
+       geometry_msgs::msg::Pose approach;
+       geometry_msgs::msg::Pose grasp;
+       geometry_msgs::msg::Pose target;
+       geometry_msgs::msg::Pose drop;
+       geometry_msgs::msg::Pose robot_pose;
+       std::vector<double> joint_pose;
+
+       //Create the instances of approach, Grasp, Target and Drop Pose
+       approach = createPose(0.399367,0,0.510952,0.923956,-0.3825,0,0);
+       grasp = createPose(0.399367,0,0.417898,0.923956,-0.3825,0,0);
+       target = createPose(0.050255,-0.301609,0.579429,-0.426951,0.904186,0.01149,-0.00536161);
+       drop = createPose(0.050255,-0.301609,0.486498,-0.426951,0.904186,0.01149,-0.00536161);
+       robot_pose = get_current_pose();
+
+       //Move the robot the above defined poses and create a pick and place simulation.
+       moveLinear(approach);
+       std::this_thread::sleep_for(std::chrono::seconds(1));
+       gripperOpen();
+       std::this_thread::sleep_for(std::chrono::seconds(1));
+       moveLinear(grasp);
+       std::this_thread::sleep_for(std::chrono::seconds(1));
+       attachObject("box","panda_link8");
+       gripperOpen(0.02,0.02);
+       std::this_thread::sleep_for(std::chrono::seconds(1));
+       moveLinear(approach);
+       std::this_thread::sleep_for(std::chrono::seconds(1));
+       planAndExecute(target);
+       std::this_thread::sleep_for(std::chrono::seconds(1));
+       moveLinear(drop);
+       std::this_thread::sleep_for(std::chrono::seconds(1));
+       detachObject("box");
+       moveLinear(robot_pose);
     }
 
 private:
@@ -277,19 +323,29 @@ private:
         RCLCPP_INFO(node_->get_logger(), "Added collison object: id=%s", id.c_str());
     }
 
-    void removeCollisionObject(std::string id="box")
+    void detachObject(const std::string &id)
     {
+        moveit_msgs::msg::AttachedCollisionObject detach_object;
         moveit_msgs::msg::CollisionObject object;
-        object.id = id;
+        detach_object.object.id = id;
+        detach_object.link_name = "panda_link8";
+        //object.header.frame_id = move_group_interface_->getPlanningFrame();
+        detach_object.object.operation = detach_object.object.REMOVE;
+
+        planning_scene_interface_->applyAttachedCollisionObject(detach_object);
+
+        RCLCPP_INFO(node_->get_logger(),"Detached object: %s", id.c_str());
+
+        object.id  = id;
         object.header.frame_id = move_group_interface_->getPlanningFrame();
         object.operation = object.REMOVE;
+        planning_scene_interface_->applyCollisionObject(object);
 
-        planning_scene_interface_->applyCollisionObjects({object});
+        RCLCPP_INFO(node_->get_logger(),"Removed object: %s", id.c_str());
 
-        RCLCPP_INFO(node_->get_logger(),"Removed collision object: %s", id.c_str());
     }
 
-    void attachObject(std::string& id, std::string& link_name)
+    void attachObject(const std::string& id, const std::string& link_name)
     {
         moveit_msgs::msg::AttachedCollisionObject object;
         object.link_name = link_name;
@@ -302,12 +358,29 @@ private:
         RCLCPP_INFO(node_->get_logger(), "Attached object '%s' to link '%s'", id.c_str(), link_name.c_str());
     }
 
+    void gripperOpen(double j1=0.035, double j2=0.035)
+    {
+        std::vector<double>open = {j1,j2};
+
+        gripper_->setJointValueTarget(open);
+        gripper_->move();
+    }
+
+    void gripperClose()
+    {
+        std::vector<double>closed = {0.0,0.0};
+
+        gripper_->setJointValueTarget(closed);
+        gripper_->move();
+    }
+
     //rclcpp::Logger logger_;
     rclcpp::Logger logger_{rclcpp::get_logger("default_logger")};  // Temporary init
     rclcpp::executors::SingleThreadedExecutor executor_;
     std::shared_ptr<rclcpp::Node> node_;
     std::unique_ptr<moveit::planning_interface::MoveGroupInterface> move_group_interface_;
     std::unique_ptr<moveit::planning_interface::PlanningSceneInterface> planning_scene_interface_;
+    std::unique_ptr<moveit::planning_interface::MoveGroupInterface> gripper_;
 
     std::thread spinner_;
 };
@@ -317,135 +390,9 @@ int main(int argc, char *argv[])
     rclcpp::init(argc, argv);
 
     PandaRobot robot;
-    robot.run("linear");
+    //robot.gripper_check();
+    robot.pickPlace();
+    //robot.run("linear");
 
     return 0;
 }
-
-/*int main(int argc, char *argv[])
-{
-    //Initialize ROS and Create the Node
-    rclcpp::init(argc, argv);
-    auto const node = std::make_shared<rclcpp::Node>(
-        "hello_moveit",
-        rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true)
-    );
-
-    //Add executors
-    rclcpp::executors::SingleThreadedExecutor executor;
-    executor.add_node(node);
-    auto spinner = std::thread([&executor]() { executor.spin(); });
-
-    //Create ROS Logger
-    auto const logger = rclcpp::get_logger("hello_moveit");
-
-    //Read SRDF File
-    std::ifstream srdf_file("/home/varun/ros2_ws/src/panda_moveit_config/config/panda.srdf");
-    if(!srdf_file.is_open())
-    {
-       RCLCPP_ERROR(logger, "Failed to open SRDF File");
-       return 1;
-    }
-
-    std::string srdf_content((std::istreambuf_iterator<char>(srdf_file)),
-                              std::istreambuf_iterator<char>());
-
-
-    srdf_file.close();
-
-    //Declare ROS Parameter
-    node->declare_parameter("robot_description_semantic",rclcpp::ParameterValue(srdf_content));
-
-    //Create the MoveIt MoveGroup Interface
-    using moveit::planning_interface::MoveGroupInterface;
-    auto move_group_interface = MoveGroupInterface(node,"panda_arm");
-    rclcpp::sleep_for(std::chrono::seconds(2));
-    std::vector<double> joint_group_positions = move_group_interface.getCurrentJointValues();
-
-    //Get Current Pose
-    std::string ee_link = move_group_interface.getEndEffectorLink();
-    geometry_msgs::msg::Pose current_pose = move_group_interface.getCurrentPose().pose;
-    RCLCPP_INFO(node->get_logger(), "Using end-effector: %s", ee_link.c_str());
-    RCLCPP_INFO(node->get_logger(), "End Effector Pose:");
-    RCLCPP_INFO(node->get_logger(), "Position -> x: %f, y: %f, z: %f",
-                 current_pose.position.x, current_pose.position.y, current_pose.position.z);
-    RCLCPP_INFO(node->get_logger(), "Orientation -> yaw: %f, pitch: %f, roll: %f, quat: %f",
-                 current_pose.orientation.x, current_pose.orientation.y, current_pose.orientation.z,
-                 current_pose.orientation.w);
-
-
-    //Set Approach Point
-    auto const approach = []
-    {
-        geometry_msgs::msg::Pose app;
-        app.orientation.w =1.0;
-        //app.orientation.x = 0.70711;
-        //app.orientation.y = -3.17467e-11;
-        //app.orientation.z = 0.707107;
-        app.position.x = 0.28;
-        app.position.y = -0.2;
-        app.position.z = 0.5;
-        return app;
-    }();
-
-    //Set a Target Pose
-    auto const target_pose = []
-    {
-        geometry_msgs::msg::Pose msg;
-        msg.orientation.w = 1.0; //1.0
-        //msg.orientation.x = 0.70706;
-        //msg.orientation.y = -1.27293e-05;
-        //msg.orientation.z = 0.707154;
-        msg.position.x = 0.28; //0.28
-        msg.position.y = -0.2; //-0.2
-        msg.position.z = 0.6; // 0.5
-        return msg;
-    }();
-
-    move_group_interface.setPoseTarget(approach);
-    auto const [done,app_plan] = [&move_group_interface]
-    {
-        moveit::planning_interface::MoveGroupInterface::Plan app;
-        auto const ok = static_cast<bool>(move_group_interface.plan(app));
-        return std::make_pair(ok,app);
-    }();
-
-    if(done)
-    {
-        move_group_interface.execute(app_plan);
-        //saveTrajectory(app_plan.trajectory_, "/home/varun/ros2_ws/src/binbot/trajectories/app_trajectory.yaml");
-    }
-
-    else
-    {
-        RCLCPP_ERROR(logger," Moving to approach point planning failed!");
-    }
-
-    std::this_thread::sleep_for(std::chrono::seconds(2));
-    move_group_interface.setPoseTarget(target_pose);
-
-    //Create a plan to that target pose
-    auto const [success,plan] = [&move_group_interface]
-    {
-        moveit::planning_interface::MoveGroupInterface::Plan msg;
-        auto const ok = static_cast<bool>(move_group_interface.plan(msg));
-        return std::make_pair(ok,msg);
-    }();
-
-    //Execute the plan
-    if(success)
-    {
-        move_group_interface.execute(plan);
-        //saveTrajectory(plan.trajectory_,"/home/varun/ros2_ws/src/binbot/trajectories/trajectory.yaml");
-    }
-
-    else
-    {
-        RCLCPP_ERROR(logger," Moving to final point planning failed!");
-    }
-
-    //Shutdown ROS
-    rclcpp::shutdown();
-    spinner.join();
-    return 0;
-}*/
