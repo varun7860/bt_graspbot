@@ -61,8 +61,18 @@ public:
     {
         gripperOpen();
         std::this_thread::sleep_for(std::chrono::seconds(1));
-        //gripperClose();
-        //std::this_thread::sleep_for(std::chrono::seconds(1));
+        gripperClose();
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    geometry_msgs::msg::Pose getPredefinedPose(const std::string& name)
+    {
+        if (name == "approach") return createPose(0.399367,0,0.510952,0.923956,-0.3825,0,0);
+        if (name == "grasp") return createPose(0.399367,0,0.417898,0.923956,-0.3825,0,0);
+        if (name == "target") return createPose(0.050255,-0.301609,0.579429,-0.426951,0.904186,0.01149,-0.00536161);
+        if (name == "drop") return createPose(0.050255,-0.301609,0.486498,-0.426951,0.904186,0.01149,-0.00536161);
+        if (name == "initial") return get_current_pose();
+        return geometry_msgs::msg::Pose();
     }
 
     void run(std::string move_type = "default")
@@ -342,7 +352,6 @@ private:
         planning_scene_interface_->applyCollisionObject(object);
 
         RCLCPP_INFO(node_->get_logger(),"Removed object: %s", id.c_str());
-
     }
 
     void attachObject(const std::string& id, const std::string& link_name)

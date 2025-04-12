@@ -1,0 +1,16 @@
+<root main_tree_to_execute="MainTree">
+    <BehaviorTree ID="MainTree">
+        <Sequence name="PickAndPlaceSequence">
+            <MoveToPose name="Move to approach pose" pose="approach"/>
+            <OpenGripper name="Open Gripper"/>
+            <MoveToPose name="Move To Grasp Pose" pose="grasp"/>
+            <AttachObject name ="Attach Object"/>
+            <CloseGripper name ="Close Gripper"/>
+            <MoveToPose name="Move to Depart Pose" pose="approach"/>
+            <MoveToPose name="Move to target pose" pose="target"/>
+            <MoveToPose name="Move to drop pose" pose="drop"/>
+            <DetachObject name="Detach Object"/>
+            <MoveToPose name="Return to Home" pose="initial"/>
+        </Sequence>
+    </BehaviorTree>
+</root>
