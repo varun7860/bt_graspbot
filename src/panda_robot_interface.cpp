@@ -26,6 +26,8 @@ PandaRobot::PandaRobot()
         std::exit(1);
     }
 
+    //node_->set_parameter(rclcpp::Parameter("use_sim_time", true));
+
     move_group_interface_ = std::make_unique<moveit::planning_interface::MoveGroupInterface>(node_, "panda_arm");
     planning_scene_interface_ = std::make_unique<moveit::planning_interface::PlanningSceneInterface>();
     gripper_ = std::make_unique<moveit::planning_interface::MoveGroupInterface>(node_,"hand");

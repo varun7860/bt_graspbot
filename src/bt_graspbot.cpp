@@ -44,10 +44,15 @@ int main(int argc, char **argv)
 
     //Execute the tree
     BT::NodeStatus status = BT::NodeStatus::IDLE;
-    while(rclcpp::ok() && status != BT::NodeStatus::SUCCESS)
+    while(rclcpp::ok())
     {
         status = tree.rootNode()->executeTick();
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        if(status == BT::NodeStatus::FAILURE)
+        {
+          std::cout << "Behavior Tree Failed";
+          break;
+        }
     }
 
     rclcpp::shutdown();
